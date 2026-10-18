@@ -1,4 +1,4 @@
-# Lúa · 0.1
+# Lúa · 0.2
 
 PWA personal de ciclo menstrual en español. Aplicación estática para GitHub Pages, sin backend, cuentas, analítica, fuentes remotas ni dependencias de producción. Esta entrega no contiene datos personales ni exportaciones reales de Flo.
 
@@ -12,7 +12,7 @@ PWA personal de ciclo menstrual en español. Aplicación estática para GitHub P
 - IndexedDB local con transacciones y detección de escrituras desde otra ventana.
 - Copias manuales cifradas AES-256-GCM, clave derivada por PBKDF2-SHA256 con 600.000 iteraciones, sal e IV aleatorios. Contraseña mínima 12 caracteres; no se conserva. Restauración validada y confirmada.
 - CSV de reglas: selección de columnas de inicio/fin, formato explícito de fecha, vista previa y deduplicación. También JSON de Lúa sin respuestas; para restauración completa, copia cifrada.
-- **Importación nativa de Flo pendiente**: no se ha inspeccionado su formato real. No admite PDF, ZIP ni esquemas JSON arbitrarios. Nunca renombrar un JSON de Flo para fingir compatibilidad.
+- **Importación de ciclos transcritos desde Flo**: admite `cycle-history-json` versión 1.0, conserva ciclos como referencias distintas del sangrado y mantiene las previsiones como no confirmadas. No es el formato oficial completo de Flo. No admite PDF, ZIP ni esquemas JSON arbitrarios.
 - Demo en memoria separada de los datos reales, diseño móvil, manifest y service worker para uso sin conexión.
 
 ## Privacidad y conservación
@@ -54,3 +54,6 @@ Al cambiar archivos cacheados, subir la versión de `CACHE` en `sw.js`. El nuevo
 6. Probar importación del formato real de Flo en el dispositivo tras adaptar el lector.
 
 Las pruebas automatizadas cubren fechas, solapamientos, deduplicación, cálculo, aprendizaje y cifrado. No sustituyen la validación visual, de IndexedDB y de instalación en Safari/iOS, que está pendiente.
+
+## Diseño 0.2
+Resumen de ciclo, vista semanal, check-in opcional de un toque, formularios inferiores en móvil, accesos Hoy/Ayer y calendario con marcadores separados para referencias importadas. No se migran ni borran datos existentes.
