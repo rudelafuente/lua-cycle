@@ -1,4 +1,4 @@
-# Lúa · 0.2
+# Lúa · 0.3
 
 PWA personal de ciclo menstrual en español. Aplicación estática para GitHub Pages, sin backend, cuentas, analítica, fuentes remotas ni dependencias de producción. Esta entrega no contiene datos personales ni exportaciones reales de Flo.
 
@@ -57,3 +57,7 @@ Las pruebas automatizadas cubren fechas, solapamientos, deduplicación, cálculo
 
 ## Diseño 0.2
 Resumen de ciclo, vista semanal, check-in opcional de un toque, formularios inferiores en móvil, accesos Hoy/Ayer y calendario con marcadores separados para referencias importadas. No se migran ni borran datos existentes.
+
+## Bienestar y diseño 0.3
+Paleta lila y morada. Hoy muestra dos consejos educativos basados en NHS (PMS y period pain, consultados 18/10/2026), con fuentes accesibles. La selección usa fechas orientativas y prioriza respuestas afirmativas de los últimos 90 días; no predice síntomas ni confirma fases hormonales. Las respuestas diarias se pueden corregir o deshacer y se conservan en las copias cifradas mediante el campo opcional tipResponses. Las copias anteriores se mantienen compatibles.
+La actualización de versiones posteriores ofrece un botón que activa el worker en espera y recarga. Para versiones antiguas: actualizar.html renueva solo la caché de aplicación sin borrar IndexedDB.

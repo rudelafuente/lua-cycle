@@ -1,6 +1,6 @@
 // Pure local calculations. No network, telemetry, or clinical claims.
 export const DAY = 86400000;
-export const empty = () => ({version:1,periods:[],cycles:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
+export const empty = () => ({version:1,periods:[],cycles:[],tipResponses:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
 export function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 export function validDate(s){return typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s+'T12:00:00Z')) && new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;}
 export const days=(a,b)=>Math.round((Date.parse(a+'T12:00:00Z')-Date.parse(b+'T12:00:00Z'))/DAY);
@@ -12,11 +12,15 @@ export function validate(raw){
  const periods=raw.periods.map(p=>{if(!validDate(p.start)||p.start>today()||(p.end!==null&&(!validDate(p.end)||p.end<p.start||p.end>today())))throw Error('Hay fechas de regla inválidas o futuras.');return {start:p.start,end:p.end};}).sort((a,b)=>a.start.localeCompare(b.start));
  periods.forEach((p,i)=>{if(i&&(periods[i-1].end===null||p.start<=periods[i-1].end))throw Error('Hay reglas superpuestas o una regla anterior sin cerrar.');});
  const cycles=validateCycles(raw.cycles??[]);
+ const tipResponses=raw.tipResponses??[];
+ if(!Array.isArray(tipResponses)||tipResponses.length>30000)throw Error('Respuestas de bienestar inválidas.');
+ const tipKeys=new Set();
+ const checkedTips=tipResponses.map(r=>{const key=r.date+':'+r.tip;if(!validDate(r.date)||r.date>today()||!['cramps','sleep','mood','bloating'].includes(r.tip)||typeof r.value!=='boolean'||tipKeys.has(key))throw Error('Respuesta de bienestar inválida o duplicada.');tipKeys.add(key);return {date:r.date,tip:r.tip,value:r.value};});
  const seen=new Set();
  const desire=raw.desire.map(r=>{if(!validDate(r.date)||r.date>today()||!Number.isInteger(r.value)||r.value<0||r.value>2||seen.has(r.date))throw Error('Hay registros de deseo inválidos o fechas duplicadas.');seen.add(r.date);return {date:r.date,value:r.value};}).sort((a,b)=>a.date.localeCompare(b.date));
  const cycle=Number(raw.settings?.cycle??28),duration=Number(raw.settings?.duration??5);
  if(!Number.isInteger(cycle)||cycle<15||cycle>90||!Number.isInteger(duration)||duration<1||duration>20)throw Error('Revisa las duraciones de ciclo y regla.');
- return {version:1,periods,cycles,desire,settings:{cycle,duration,cycleGuidance:raw.settings?.cycleGuidance!==false},lastBackup:typeof raw.lastBackup==='string'?raw.lastBackup:null};
+ return {version:1,periods,cycles,desire,tipResponses:checkedTips,settings:{cycle,duration,cycleGuidance:raw.settings?.cycleGuidance!==false},lastBackup:typeof raw.lastBackup==='string'?raw.lastBackup:null};
 }
 export function cycleStats(data){
  const p=cycleAnchors(data), intervals=p.slice(1).map((x,i)=>days(x.start,p[i].start)).slice(-6);
