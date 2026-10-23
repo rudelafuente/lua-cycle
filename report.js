@@ -5,10 +5,13 @@ import {patterns} from './tips.js';
 // Prefix cells that a spreadsheet would run as a formula.
 const cell=v=>{let s=String(v??'');if(/^[=+\-@\t\r]/.test(s))s="'"+s;return /[";\n\r]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
 const csv=rows=>'﻿'+rows.map(r=>r.map(cell).join(';')).join('\r\n')+'\r\n';
+// Intimacy stays on the device: medical exports leave it out, and days with nothing else are skipped.
+const clinical=data=>({...data,logs:data.logs.filter(l=>l.flow||l.pain!==null||l.mood.length||l.symptoms.length||l.note)});
 const describe=l=>({flow:l.flow?LOG.flow[l.flow]:'',pain:l.pain===null?'':LOG.pain[l.pain],mood:l.mood.map(m=>LOG.mood[m]).join(', '),symptoms:l.symptoms.map(x=>LOG.symptoms[x]).join(', ')});
 export function cyclesCSV(data){return csv([['inicio','fin_regla','dias_regla','dias_regla_importados','dias_ciclo','origen','usado_en_prevision'],...cycleHistory(data).map(c=>[c.start,c.end??'',c.bleeding??'',c.importedBleeding??'',c.length??'',c.reference?'Flo (referencia de ciclo)':'Registrado',c.length===null?'':c.used?'sí':'no'])]);}
-export function logCSV(data,{notes=false}={}){return csv([['fecha','sangrado','dolor','animo','sintomas',...(notes?['nota']:[])],...data.logs.map(l=>{const d=describe(l);return [l.date,d.flow,d.pain,d.mood,d.symptoms,...(notes?[l.note]:[])];})]);}
+export function logCSV(data,{notes=false}={}){data=clinical(data);return csv([['fecha','sangrado','dolor','animo','sintomas',...(notes?['nota']:[])],...data.logs.map(l=>{const d=describe(l);return [l.date,d.flow,d.pain,d.mood,d.symptoms,...(notes?[l.note]:[])];})]);}
 export function reportHTML(data,{notes=false,date=today()}={}){
+ data=clinical(data);
  const st=cycleStats(data),long=d=>fmt(d,{day:'numeric',month:'short',year:'numeric'}),from=addDays(date,-89);
  const cycles=cycleHistory(data).filter(c=>c.start>=addDays(date,-365)),logs=data.logs.filter(l=>l.date>=from&&l.date<=date),sum=logSummary(data,from,date);
  const table=(head,rows)=>rows.length?`<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<p class="muted">Sin datos en este periodo.</p>';

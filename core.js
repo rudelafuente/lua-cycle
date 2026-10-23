@@ -1,6 +1,6 @@
 // Pure local calculations. No network, telemetry, or clinical claims.
 export const DAY = 86400000;
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 export const empty = () => ({version:1,periods:[],cycles:[],logs:[],tipResponses:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
 // Daily log vocabulary. Ids are stored; labels are only for display and exports.
 export const LOG = {
@@ -11,7 +11,7 @@ export const LOG = {
 };
 // Wellbeing topics that accept feedback; their content lives in tips.js.
 export const TIP_IDS = ['cramps','heavy','sleep','mood','bloating','headache','tender','acne','cravings'];
-export const emptyLog = date => ({date,flow:null,pain:null,mood:[],symptoms:[],note:''});
+export const emptyLog = date => ({date,flow:null,pain:null,mood:[],symptoms:[],note:'',intimacy:false});
 // Period starts this close to an imported reference replace it as the cycle anchor.
 export const ANCHOR_TOLERANCE = 7;
 export function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -40,12 +40,13 @@ export function validateLogs(rows){
  const seen=new Set(),tags=(list,options)=>{if(!Array.isArray(list)||new Set(list).size!==list.length||list.some(x=>!Object.hasOwn(options,x)))throw Error('Registro diario con opciones no reconocidas.');return Object.keys(options).filter(k=>list.includes(k));};
  return rows.map(r=>{
  if(!validDate(r.date)||r.date>today()||seen.has(r.date))throw Error('Registro diario con fechas inválidas o duplicadas.');seen.add(r.date);
- const flow=r.flow??null,pain=r.pain??null,note=r.note??'';
+ const flow=r.flow??null,pain=r.pain??null,note=r.note??'',intimacy=r.intimacy??false;
  if(flow!==null&&!Object.hasOwn(LOG.flow,flow))throw Error('Intensidad de sangrado no reconocida.');
  if(pain!==null&&(!Number.isInteger(pain)||pain<0||pain>3))throw Error('Nivel de dolor no reconocido.');
  if(typeof note!=='string'||note.length>1000)throw Error('La nota del día admite hasta 1000 caracteres.');
- return {date:r.date,flow,pain,mood:tags(r.mood??[],LOG.mood),symptoms:tags(r.symptoms??[],LOG.symptoms),note:note.trim()};
- }).filter(r=>r.flow!==null||r.pain!==null||r.mood.length||r.symptoms.length||r.note).sort((a,b)=>a.date.localeCompare(b.date));
+ if(typeof intimacy!=='boolean')throw Error('Valor de intimidad no reconocido.');
+ return {date:r.date,flow,pain,mood:tags(r.mood??[],LOG.mood),symptoms:tags(r.symptoms??[],LOG.symptoms),note:note.trim(),intimacy};
+ }).filter(r=>r.flow!==null||r.pain!==null||r.mood.length||r.symptoms.length||r.note||r.intimacy).sort((a,b)=>a.date.localeCompare(b.date));
 }
 // Intervals outside 15–90 days, or far above the recent median (a probable missed record), are kept for display but not used.
 export function cycleIntervals(data){
@@ -102,8 +103,9 @@ export function logSummary(data,from,to=today()){
  const count=field=>Object.entries(LOG[field]).map(([id,label])=>({id,label,days:rows.filter(l=>l[field].includes(id)).length})).filter(x=>x.days).sort((a,b)=>b.days-a.days);
  return {days:rows.length,flow:rows.filter(l=>l.flow).length,pain:rows.filter(l=>l.pain>0).length,symptoms:count('symptoms'),mood:count('mood')};
 }
+// Future dates are placed using projected starts, so a late forecast places nothing beyond the current cycle.
 function phaseFor(data,date){
- const ps=cycleAnchors(data);let idx=-1;ps.forEach((p,i)=>{if(p.start<=date)idx=i;});
+ const ps=[...cycleAnchors(data),...(date>today()?projections(data):[])];let idx=-1;ps.forEach((p,i)=>{if(p.start<=date)idx=i;});
  if(idx<0)return null;
  const len=ps[idx+1]?days(ps[idx+1].start,ps[idx].start):cycleStats(data).length;
  const offset=days(date,ps[idx].start);if(offset>=len||len<=0)return null;
@@ -112,17 +114,20 @@ function phaseFor(data,date){
 export function desireEstimate(data,date){
  if(!data.settings.cycleGuidance)return {title:'Orientación desactivada',detail:'Puedes seguir registrando cómo te sientes.',kind:'none'};
  const phase=phaseFor(data,date);if(!phase)return {title:'Sin orientación para esta fecha',detail:'Registra el ciclo actual para poder situar esta fecha.',kind:'none'};
- const samples=data.desire.map(r=>({...r,phase:phaseFor(data,r.date)})).filter(r=>r.phase);
- const local=samples.filter(r=>r.phase.bucket===phase.bucket);
- const cycles=new Set(local.map(r=>r.phase.cycle));
- if(local.length>=6&&cycles.size>=3){
-  const counts=[0,0,0];local.forEach(r=>counts[r.value]++);
-  const winner=counts.indexOf(Math.max(...counts)),agreement=counts[winner]/local.length;
-  if(agreement<0.67)return {title:'Sin patrón claro',detail:`Tus ${local.length} registros en esta parte del ciclo varían. No hay una tendencia consistente.`,kind:'personal'};
-  return {title:['Tendencia a menos ganas','Tendencia a ganas habituales','Tendencia a más ganas'][winner],detail:`Orientación experimental basada en ${local.length} registros de ${cycles.size} ciclos en esta parte del ciclo. Puede cambiar.`,kind:'personal'};
+ const t=desireTrend(data)[phase.bucket];
+ if(t.enough){
+  if(t.value===null)return {title:'Sin patrón claro',detail:`Tus ${t.count} registros en esta parte del ciclo varían. No hay una tendencia consistente.`,kind:'personal'};
+  return {title:['Tendencia a menos ganas','Tendencia a ganas habituales','Tendencia a más ganas'][t.value],detail:`Orientación experimental basada en ${t.count} registros de ${t.cycles} ciclos en esta parte del ciclo. Puede cambiar.`,kind:'personal'};
  }
- return {title:phase.bucket===1?'Posible aumento del deseo':'Tu patrón está por descubrir',detail:phase.bucket===1?'Referencia general de la parte media del ciclo; puede no coincidir contigo. No indica ovulación ni fertilidad.':`Aún no hay suficientes correcciones en esta parte del ciclo (${local.length} registros en ${cycles.size} ciclos).`,kind:'general'};
+ return {title:phase.bucket===1?'Posible aumento del deseo':'Tu patrón está por descubrir',detail:phase.bucket===1?'Referencia general de la parte media del ciclo; puede no coincidir contigo. No indica ovulación ni fertilidad.':`Aún no hay suficientes correcciones en esta parte del ciclo (${t.count} registros en ${t.cycles} ciclos).`,kind:'general'};
 }
+// Personal desire tendency per quarter of the cycle: needs ≥6 answers from ≥3 cycles; value is null without 2/3 agreement.
+export function desireTrend(data){
+ const samples=data.desire.map(r=>({...r,phase:phaseFor(data,r.date)})).filter(r=>r.phase);
+ return [0,1,2,3].map(bucket=>{const local=samples.filter(r=>r.phase.bucket===bucket),cycles=new Set(local.map(r=>r.phase.cycle)).size,counts=[0,0,0];local.forEach(r=>counts[r.value]++);const winner=counts.indexOf(Math.max(...counts)),enough=local.length>=6&&cycles>=3;return {count:local.length,cycles,enough,value:enough&&counts[winner]/local.length>=0.67?winner:null};});
+}
+// Green calendar days: only where her own answers show more desire. Never a general reference, never fertility.
+export function receptiveOn(data,date,trend=desireTrend(data)){if(!data.settings.cycleGuidance)return false;const p=phaseFor(data,date);return !!p&&trend[p.bucket].value===2;}
 export function mergePeriods(data,rows){
  const combined=data.periods.map(p=>({...p}));let added=0,duplicates=0,updated=0;
  for(const row of rows){const old=combined.find(p=>p.start===row.start);if(old){if(old.end===row.end){duplicates++;continue;}if(old.end===null&&row.end!==null){old.end=row.end;updated++;continue;}if(row.end===null){duplicates++;continue;}throw Error(`Dos finales distintos para la regla del ${row.start}. Corrige el registro antes de importar.`);}combined.push({...row});added++;}

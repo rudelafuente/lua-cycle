@@ -82,3 +82,7 @@ La actualización de versiones posteriores ofrece un botón que activa el worker
 - En la cuadrícula: regla registrada (rosa), regla importada de Flo (rayada), regla prevista (discontinua), posible inicio (subrayado) y enlace directo al mes de la próxima regla.
 - Al tocar un día: día del ciclo, día de regla si lo es y días que faltan para la próxima.
 
+
+## Intimidad y días con más ganas 0.7
+- Registro diario: nueva opción «★ Hubo intimidad» (campo opcional `intimacy` en `logs`). En el calendario esos días llevan una estrella. Las copias anteriores siguen siendo compatibles. No aparece en el resumen médico ni en los CSV.
+- Calendario: en verde, la parte del ciclo en la que las propias respuestas de deseo marcan «Más» (al menos 6 respuestas de 3 ciclos con 2/3 de coincidencia). Sin respuestas suficientes no se marca nada. No indica ovulación ni fertilidad.

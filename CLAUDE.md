@@ -81,7 +81,7 @@ Módulos ES nativos cargados desde `index.html`:
 `validate()` es el único punto de control del esquema (`version: 1`). Por ahí pasan los guardados, las importaciones y las restauraciones. Normaliza los datos y rechaza fechas futuras, solapamientos, más de una regla abierta y duplicados.
 
 - `periods` — sangrado confirmado, con la forma `{start, end|null}`. Una regla abierta desde hace `STALE_OPEN` días o más se considera olvidada.
-- `logs` — registro diario `{date, flow, pain, mood[], symptoms[], note}`. `validate()` descarta los días vacíos y ordena las etiquetas según `LOG`. Marcar sangrado nunca crea una regla.
+- `logs` — registro diario `{date, flow, pain, mood[], symptoms[], note, intimacy}`. `intimacy` es opcional (booleano, por defecto `false`), se marca con una estrella en el calendario y nunca sale en los exportes médicos de `report.js`. `validate()` descarta los días vacíos y ordena las etiquetas según `LOG`. Marcar sangrado nunca crea una regla.
 - `cycles` — referencias importadas de Flo (`bleedingConfirmed: false`). Pueden incluir `periodDays`, que en el JSON es `period_length_days`: días de regla importados, sin confirmar. `importedPeriodOn()` los muestra en el calendario y `cycleStats` los usa para la duración solo si no hay reglas registradas (`durationSource`). `cycleAnchors()` las combina con `periods` para la previsión: una regla a `ANCHOR_TOLERANCE` (7) días o menos sustituye a la referencia. La interfaz nunca debe presentarlas como sangrado confirmado.
 - `desire` (valor de 0 a 2), `tipResponses` (`{date, tip, value:boolean}`), `settings` y `lastBackup`.
 
@@ -104,7 +104,7 @@ Las copias antiguas tienen que seguir restaurándose:
   - Los intervalos atípicos se muestran, pero no se usan en la previsión.
   - No cerrar una regla sin confirmación.
   - No inventar sangrado a partir de referencias importadas.
-  - La tendencia personal de deseo exige al menos 6 respuestas de 3 ciclos distintos en el mismo tramo del ciclo, con al menos 2/3 de coincidencia.
+  - La tendencia personal de deseo exige al menos 6 respuestas de 3 ciclos distintos en el mismo tramo del ciclo, con al menos 2/3 de coincidencia (`desireTrend`). Los días en verde del calendario (`receptiveOn`) salen solo de esa tendencia cuando es «más ganas», nunca de la referencia general.
   - No afirmar ovulación, fertilidad ni uso anticonceptivo.
 - **Datos reales:** no subir nunca al repositorio datos reales, exportaciones de Flo ni archivos `*.lua-backup`.
 - **Pendiente:** la validación manual en iPhone (instalación, IndexedDB, uso sin conexión, copias en iCloud Drive) y el lector para la exportación real de Flo. Los tests no cubren nada de esto.
