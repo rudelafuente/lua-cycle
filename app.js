@@ -7,6 +7,7 @@ import {historyView} from './views/history.js';
 import {settingsView} from './views/settings.js';
 import * as M from './views/modals.js';
 import {reportHTML,cyclesCSV,logCSV} from './report.js';
+import {applyAnswer} from './tips.js';
 const $=s=>document.querySelector(s);
 let data=empty(),realData,view='home',demo=false,day=today(),selected=day,month=day.slice(0,7),storageOK=true,offlineReady=false,busy=false;
 let pendingImport=null,csvData=null,restorePayload=null,pendingFile=null,pendingPeriods=null,lastFocus=null;
@@ -33,7 +34,7 @@ async function onAction(action,button){switch(action){case 'close':$('#modal').c
  case 'report-log-csv':offerFile(new File([logCSV(data,{notes:$('#report-notes').checked})],`lua-registro-${today()}.csv`,{type:'text/csv'}),'CSV del registro diario preparado','Una fila por día anotado. No está cifrado.');break;
  case 'confirm-restore':if(!restorePayload)throw Error('Abre de nuevo la copia.');await save(restorePayload);restorePayload=null;$('#modal').close();render();toast('Copia restaurada.');break;case 'persist':{const granted=await navigator.storage?.persist?.();$('#persist-status').textContent=granted?'Persistencia concedida. Mantén también una copia de seguridad.':'El navegador no ha concedido persistencia. Mantén copias de seguridad; instalar en inicio puede ayudar.';break;}case 'demo':if(demo){data=realData;realData=null;demo=false;}else{realData=data;data=demoData();demo=true;}selected=today();month=selected.slice(0,7);render();break;case 'erase':modal(M.confirmModal('Borrar datos locales','Eliminará todas las reglas, anotaciones, respuestas y preferencias de este dispositivo. Las copias que hayas exportado no se borran.','confirm-erase'));break;case 'confirm-erase':await save(empty());$('#modal').close();render();toast(demo?'Demo vaciada. Tus datos reales siguen intactos.':'Datos locales eliminados.');break;case 'reset-learning':modal(M.confirmModal('Reiniciar aprendizaje','Se eliminarán todas las respuestas de deseo. Las fechas de la regla y tus anotaciones diarias se conservan.','confirm-reset-learning'));break;case 'confirm-reset-learning':await save({...data,desire:[]});$('#modal').close();render();toast('Aprendizaje reiniciado.');break;}}
 async function onClick(event){const b=event.target.closest('button');if(!b||busy)return;if($('#app').contains(b))lastFocus=focusKey(b);try{
- if(b.dataset.tip){busy=true;const tip=b.dataset.tip,value=b.dataset.tipValue;const rows=(data.tipResponses??[]).filter(r=>!(r.date===today()&&r.tip===tip));if(value!=='undo')rows.push({date:today(),tip,value:value==='true'});await save({...data,tipResponses:rows});render();return;}
+ if(b.dataset.tip){busy=true;const v=b.dataset.tipValue;await save(applyAnswer(data,b.dataset.tip,today(),v==='undo'?null:v==='true'));render();return;}
  if(b.dataset.view){view=b.dataset.view;render();window.scrollTo(0,0);return;}
  if(b.dataset.month){const dt=new Date(month+'-15T12:00:00');dt.setMonth(dt.getMonth()+Number(b.dataset.month));month=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;render();return;}
  if(b.dataset.date){selected=b.dataset.date;month=selected.slice(0,7);view='calendar';render();if(window.matchMedia('(max-width:720px)').matches)document.querySelector('.day-detail')?.scrollIntoView({behavior:'smooth',block:'start'});return;}

@@ -1,4 +1,4 @@
-# Lúa · 0.4
+# Lúa · 0.5
 
 PWA personal de ciclo menstrual en español. Aplicación estática para GitHub Pages, sin backend, cuentas, analítica, fuentes remotas ni dependencias de producción. Esta entrega no contiene datos personales ni exportaciones reales de Flo.
 
@@ -71,3 +71,8 @@ La actualización de versiones posteriores ofrece un botón que activa el worker
 - Una regla abierta desde hace 15 días o más se trata como olvidada: registrar una nueva propone cerrarla con la duración habitual, siempre con confirmación.
 - La aplicación se refresca al volver a primer plano (fecha de hoy y cambios desde otra ventana), conserva el foco tras cada toque y el service worker descarga sin la caché HTTP para no mezclar versiones.
 
+## Pequeñas pistas 0.5
+- Once temas breves (cólicos, sangrado abundante, cansancio, ánimo, hinchazón, dolor de cabeza, pecho sensible, piel, antojos, retraso y ciclos irregulares), cada uno con una línea de contexto, una acción y, plegado, cuándo consultar y su fuente del NHS (consultadas el 23/10/2026). Sin artículos largos.
+- «Me pasa» se guarda en el registro diario y lo anotado en el registro cuenta como «Me pasa»; «No me pasa» baja el tema.
+- Patrones propios: si una misma anotación se repite en la misma ventana de 3 días (desde el inicio del ciclo o antes de la regla) en al menos 3 de los últimos 6 ciclos anotados y en al menos la mitad, aparece como «Tu patrón» ese día y en Historial. Los de antes de la regla solo se muestran con una previsión estable. Describen anotaciones pasadas; no predicen.
+- Importación de Flo con días de regla: `cycle-history-json` admite `period_length_days` opcional por ciclo. Se guardan como días de regla importados (sin confirmar): se ven en el calendario como «Importado de Flo», sirven para estimar la duración solo mientras no haya reglas registradas y al confirmar las fechas se proponen como punto de partida.

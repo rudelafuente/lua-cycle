@@ -1,6 +1,6 @@
 // Pure local calculations. No network, telemetry, or clinical claims.
 export const DAY = 86400000;
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 export const empty = () => ({version:1,periods:[],cycles:[],logs:[],tipResponses:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
 // Daily log vocabulary. Ids are stored; labels are only for display and exports.
 export const LOG = {
@@ -9,6 +9,8 @@ export const LOG = {
  mood:{calm:'Calma',happy:'Alegría',sensitive:'Sensibilidad',irritable:'Irritabilidad',sad:'Tristeza',anxious:'Ansiedad'},
  symptoms:{cramps:'Cólicos',headache:'Dolor de cabeza',backache:'Dolor lumbar',bloating:'Hinchazón',tender:'Pecho sensible',acne:'Acné',fatigue:'Cansancio',cravings:'Antojos'}
 };
+// Wellbeing topics that accept feedback; their content lives in tips.js.
+export const TIP_IDS = ['cramps','heavy','sleep','mood','bloating','headache','tender','acne','cravings'];
 export const emptyLog = date => ({date,flow:null,pain:null,mood:[],symptoms:[],note:''});
 // Period starts this close to an imported reference replace it as the cycle anchor.
 export const ANCHOR_TOLERANCE = 7;
@@ -26,7 +28,7 @@ export function validate(raw){
  const tipResponses=raw.tipResponses??[];
  if(!Array.isArray(tipResponses)||tipResponses.length>30000)throw Error('Respuestas de bienestar inválidas.');
  const tipKeys=new Set();
- const checkedTips=tipResponses.map(r=>{const key=r.date+':'+r.tip;if(!validDate(r.date)||r.date>today()||!['cramps','sleep','mood','bloating'].includes(r.tip)||typeof r.value!=='boolean'||tipKeys.has(key))throw Error('Respuesta de bienestar inválida o duplicada.');tipKeys.add(key);return {date:r.date,tip:r.tip,value:r.value};});
+ const checkedTips=tipResponses.map(r=>{const key=r.date+':'+r.tip;if(!validDate(r.date)||r.date>today()||!TIP_IDS.includes(r.tip)||typeof r.value!=='boolean'||tipKeys.has(key))throw Error('Respuesta de bienestar inválida o duplicada.');tipKeys.add(key);return {date:r.date,tip:r.tip,value:r.value};});
  const seen=new Set();
  const desire=raw.desire.map(r=>{if(!validDate(r.date)||r.date>today()||!Number.isInteger(r.value)||r.value<0||r.value>2||seen.has(r.date))throw Error('Hay registros de deseo inválidos o fechas duplicadas.');seen.add(r.date);return {date:r.date,value:r.value};}).sort((a,b)=>a.date.localeCompare(b.date));
  const cycle=Number(raw.settings?.cycle??28),duration=Number(raw.settings?.duration??5);
@@ -54,8 +56,10 @@ export function cycleIntervals(data){
 export function cycleStats(data){
  const all=cycleIntervals(data),intervals=all.filter(x=>x.used).slice(-6).map(x=>x.length);
  const length=Math.round(median(intervals)??data.settings.cycle);
- const durations=data.periods.filter(x=>x.end).slice(-6).map(x=>days(x.end,x.start)+1);
- return {length,duration:Math.round(median(durations)??data.settings.duration),intervals,excluded:all.filter(x=>!x.used).length,spread:intervals.length?Math.max(...intervals)-Math.min(...intervals):0};
+ // Confirmed periods first; imported Flo period lengths only while there are none; then the setting.
+ const durations=data.periods.filter(x=>x.end).slice(-6).map(x=>days(x.end,x.start)+1),imported=(data.cycles??[]).filter(c=>c.periodDays).slice(-6).map(c=>c.periodDays);
+ const durationSource=durations.length?'periods':imported.length?'imported':'settings';
+ return {length,duration:Math.round(median(durations)??median(imported)??data.settings.duration),durationSource,intervals,excluded:all.filter(x=>!x.used).length,spread:intervals.length?Math.max(...intervals)-Math.min(...intervals):0};
 }
 export function forecast(data,date=today()){
  const stats=cycleStats(data),last=cycleAnchors(data).at(-1);
@@ -78,7 +82,7 @@ export function closeOpenBefore(data,start){
 }
 export function cycleHistory(data){
  const iv=cycleIntervals(data);
- return cycleAnchors(data).map((a,i)=>{const p=data.periods.find(p=>p.start===a.start);return {start:a.start,reference:a.reference,end:p?.end??null,bleeding:p?.end?days(p.end,p.start)+1:null,length:iv[i]?.length??null,used:iv[i]?.used??false};});
+ return cycleAnchors(data).map((a,i)=>{const p=data.periods.find(p=>p.start===a.start);return {start:a.start,reference:a.reference,end:p?.end??null,bleeding:p?.end?days(p.end,p.start)+1:null,importedBleeding:a.reference?(data.cycles.find(c=>c.start===a.start)?.periodDays??null):null,length:iv[i]?.length??null,used:iv[i]?.used??false};});
 }
 export function logSummary(data,from,to=today()){
  const rows=(data.logs??[]).filter(l=>l.date>=from&&l.date<=to);
@@ -140,20 +144,25 @@ export function validateCycles(rows){
  const end=r.end??null,predictedEnd=r.predictedEnd??null;
  if(end!==null&&(!validDate(end)||end<r.start||end>today()))throw Error('Fin de ciclo inválido.');
  if(predictedEnd!==null&&(!validDate(predictedEnd)||predictedEnd<r.start))throw Error('Previsión de ciclo inválida.');
+ const periodDays=r.periodDays??null;
+ if(periodDays!==null&&(!Number.isInteger(periodDays)||periodDays<1||periodDays>20||(end&&periodDays>days(end,r.start)+1)))throw Error('Duración de regla importada inválida.');
  if(!['completed_as_shown','ongoing'].includes(r.status))throw Error('Estado de ciclo no reconocido.');
  if(r.status==='completed_as_shown'&&!end)throw Error('Falta el final del ciclo transcrito.');
  if(r.status==='ongoing'&&end)throw Error('Un ciclo en curso no debe tener un final confirmado.');
- return {start:r.start,end,predictedEnd,status:r.status,source:'Flo · transcripción',bleedingConfirmed:false};
+ return {start:r.start,end,predictedEnd,periodDays,status:r.status,source:'Flo · transcripción',bleedingConfirmed:false};
  }).sort((a,b)=>a.start.localeCompare(b.start)).map((r,i,a)=>{if(i&&a[i-1].end&&a[i-1].end>=r.start)throw Error('Ciclos superpuestos.');if(i&&a[i-1].status==='ongoing')throw Error('El ciclo en curso debe ser el último.');return r;});
 }
+// Imported (unconfirmed) period days from Flo covering a date, unless a confirmed period already does.
+export function importedPeriodOn(data,date){if(date>today()||data.periods.some(p=>date>=p.start&&date<=(p.end??today())))return null;return (data.cycles??[]).find(c=>c.periodDays&&date>=c.start&&date<=addDays(c.start,c.periodDays-1))??null;}
 export function cycleAnchors(data){const refs=(data.cycles??[]).filter(c=>!data.periods.some(p=>Math.abs(days(p.start,c.start))<=ANCHOR_TOLERANCE));return [...data.periods.map(p=>({start:p.start,reference:false})),...refs.map(c=>({start:c.start,reference:true}))].sort((a,b)=>a.start.localeCompare(b.start));}
 export function importCycleHistory(data,raw){
  if(raw.format!=='cycle-history-json'||raw.schema_version!=='1.0'||!Array.isArray(raw.cycles)||!raw.cycles.length)throw Error('Formato de ciclos no reconocido.');
  const rows=validateCycles(raw.cycles.map(c=>{
  if(c.length_days!==undefined&&(!c.end_date||days(c.end_date,c.start_date)+1!==c.length_days))throw Error('La duración del ciclo no coincide con sus fechas.');
  if(c.status==='ongoing'&&c.end_date_confirmed===true)throw Error('Estado contradictorio en el ciclo actual.');
- return {start:c.start_date,end:c.end_date??null,predictedEnd:c.predicted_end_date??null,status:c.status};}));
- const combined=[...(data.cycles??[])];let added=0,duplicates=0;
- for(const r of rows){const old=combined.find(c=>c.start===r.start);if(old){if(JSON.stringify(old)!==JSON.stringify(r))throw Error('Existe una referencia distinta para el ciclo del '+r.start+'. Elimínala antes de importar.');duplicates++;}else{combined.push(r);added++;}}
- return {data:validate({...data,cycles:combined}),added,duplicates,updated:0,rows};
+ return {start:c.start_date,end:c.end_date??null,predictedEnd:c.predicted_end_date??null,periodDays:c.period_length_days??null,status:c.status};}));
+ const combined=[...(data.cycles??[])];let added=0,duplicates=0,updated=0;
+ // A re-import may only add the imported period length to an existing reference; any other difference is a conflict.
+ for(const r of rows){const i=combined.findIndex(c=>c.start===r.start),old=combined[i];if(old){if(JSON.stringify(old)===JSON.stringify(r)){duplicates++;continue;}if(old.periodDays===null&&JSON.stringify({...old,periodDays:r.periodDays})===JSON.stringify(r)){combined[i]=r;updated++;continue;}throw Error('Existe una referencia distinta para el ciclo del '+r.start+'. Elimínala antes de importar.');}combined.push(r);added++;}
+ return {data:validate({...data,cycles:combined}),added,duplicates,updated,rows};
 }
