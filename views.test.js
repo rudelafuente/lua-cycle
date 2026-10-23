@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile,access} from 'node:fs/promises';
+import {VERSION,empty,validate,demoData,today,addDays} from './core.js';
+import {home} from './views/home.js';
+import {calendarView} from './views/calendar.js';
+import {historyView} from './views/history.js';
+import {settingsView} from './views/settings.js';
+import {reportHTML,cyclesCSV,logCSV} from './report.js';
+const state=data=>({data,view:'home',demo:false,selected:today(),month:today().slice(0,7),offlineReady:true,storageOK:true});
+const evil='<img src=x onerror=alert(1)>';
+test('Every view renders for empty and demo data',()=>{for(const data of [empty(),demoData()])for(const view of [home,calendarView,historyView,settingsView]){const html=view(state(data));assert.ok(html.length>500);assert.ok(!html.includes('undefined')&&!html.includes('NaN'));}});
+test('Notes are escaped in the app and in the report, and excluded from exports unless asked',()=>{const data=validate({...empty(),logs:[{date:today(),note:evil,pain:1}]});assert.ok(!home(state(data)).includes(evil));const html=reportHTML(data,{notes:true});assert.ok(!html.includes(evil)&&html.includes('&lt;img'));assert.ok(!reportHTML(data).includes('&lt;img'));assert.ok(!logCSV(data).includes('onerror'));});
+test('CSV exports neutralize spreadsheet formulas',()=>{const data=validate({...empty(),logs:[{date:addDays(today(),-1),note:'=HYPERLINK("x")'}]});assert.match(logCSV(data,{notes:true}),/;"'=HYPERLINK\(""x""\)"\r\n$/);assert.match(cyclesCSV(demoData()),/^﻿inicio;fin_regla/);});
+test('Version, service worker and shipped files stay in sync',async()=>{const sw=await readFile('sw.js','utf8'),pkg=JSON.parse(await readFile('package.json','utf8'));assert.equal(sw.match(/const VERSION='([^']+)'/)[1],VERSION);assert.equal(pkg.version,VERSION);const assets=JSON.parse(sw.match(/const ASSETS=(\[.*?\]);/)[1].replace(/'/g,'"'));for(const a of assets.filter(a=>a!=='./'))await access(a);const seen=new Set(),walk=async file=>{if(seen.has(file))return;seen.add(file);const src=await readFile(file,'utf8');for(const [,spec] of src.matchAll(/from '(\.[^']+)'/g))await walk(new URL(spec,'file:///root/'+file).pathname.slice(6));};await walk('app.js');for(const file of seen)assert.ok(assets.includes('./'+file),`${file} falta en ASSETS de sw.js`);});

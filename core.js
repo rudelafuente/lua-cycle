@@ -1,6 +1,17 @@
 // Pure local calculations. No network, telemetry, or clinical claims.
 export const DAY = 86400000;
-export const empty = () => ({version:1,periods:[],cycles:[],tipResponses:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
+export const VERSION = '0.4.0';
+export const empty = () => ({version:1,periods:[],cycles:[],logs:[],tipResponses:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
+// Daily log vocabulary. Ids are stored; labels are only for display and exports.
+export const LOG = {
+ flow:{spotting:'Manchado',light:'Ligero',medium:'Medio',heavy:'Abundante'},
+ pain:['Sin dolor','Leve','Moderado','Intenso'],
+ mood:{calm:'Calma',happy:'Alegría',sensitive:'Sensibilidad',irritable:'Irritabilidad',sad:'Tristeza',anxious:'Ansiedad'},
+ symptoms:{cramps:'Cólicos',headache:'Dolor de cabeza',backache:'Dolor lumbar',bloating:'Hinchazón',tender:'Pecho sensible',acne:'Acné',fatigue:'Cansancio',cravings:'Antojos'}
+};
+export const emptyLog = date => ({date,flow:null,pain:null,mood:[],symptoms:[],note:''});
+// Period starts this close to an imported reference replace it as the cycle anchor.
+export const ANCHOR_TOLERANCE = 7;
 export function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 export function validDate(s){return typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s+'T12:00:00Z')) && new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s;}
 export const days=(a,b)=>Math.round((Date.parse(a+'T12:00:00Z')-Date.parse(b+'T12:00:00Z'))/DAY);
@@ -11,7 +22,7 @@ export function validate(raw){
  if(raw.periods.length>5000||raw.desire.length>30000)throw Error('El archivo contiene demasiados registros.');
  const periods=raw.periods.map(p=>{if(!validDate(p.start)||p.start>today()||(p.end!==null&&(!validDate(p.end)||p.end<p.start||p.end>today())))throw Error('Hay fechas de regla inválidas o futuras.');return {start:p.start,end:p.end};}).sort((a,b)=>a.start.localeCompare(b.start));
  periods.forEach((p,i)=>{if(i&&(periods[i-1].end===null||p.start<=periods[i-1].end))throw Error('Hay reglas superpuestas o una regla anterior sin cerrar.');});
- const cycles=validateCycles(raw.cycles??[]);
+ const cycles=validateCycles(raw.cycles??[]),logs=validateLogs(raw.logs??[]);
  const tipResponses=raw.tipResponses??[];
  if(!Array.isArray(tipResponses)||tipResponses.length>30000)throw Error('Respuestas de bienestar inválidas.');
  const tipKeys=new Set();
@@ -20,19 +31,59 @@ export function validate(raw){
  const desire=raw.desire.map(r=>{if(!validDate(r.date)||r.date>today()||!Number.isInteger(r.value)||r.value<0||r.value>2||seen.has(r.date))throw Error('Hay registros de deseo inválidos o fechas duplicadas.');seen.add(r.date);return {date:r.date,value:r.value};}).sort((a,b)=>a.date.localeCompare(b.date));
  const cycle=Number(raw.settings?.cycle??28),duration=Number(raw.settings?.duration??5);
  if(!Number.isInteger(cycle)||cycle<15||cycle>90||!Number.isInteger(duration)||duration<1||duration>20)throw Error('Revisa las duraciones de ciclo y regla.');
- return {version:1,periods,cycles,desire,tipResponses:checkedTips,settings:{cycle,duration,cycleGuidance:raw.settings?.cycleGuidance!==false},lastBackup:typeof raw.lastBackup==='string'?raw.lastBackup:null};
+ return {version:1,periods,cycles,logs,desire,tipResponses:checkedTips,settings:{cycle,duration,cycleGuidance:raw.settings?.cycleGuidance!==false},lastBackup:typeof raw.lastBackup==='string'?raw.lastBackup:null};
+}
+export function validateLogs(rows){
+ if(!Array.isArray(rows)||rows.length>30000)throw Error('Registro diario inválido.');
+ const seen=new Set(),tags=(list,options)=>{if(!Array.isArray(list)||new Set(list).size!==list.length||list.some(x=>!Object.hasOwn(options,x)))throw Error('Registro diario con opciones no reconocidas.');return Object.keys(options).filter(k=>list.includes(k));};
+ return rows.map(r=>{
+ if(!validDate(r.date)||r.date>today()||seen.has(r.date))throw Error('Registro diario con fechas inválidas o duplicadas.');seen.add(r.date);
+ const flow=r.flow??null,pain=r.pain??null,note=r.note??'';
+ if(flow!==null&&!Object.hasOwn(LOG.flow,flow))throw Error('Intensidad de sangrado no reconocida.');
+ if(pain!==null&&(!Number.isInteger(pain)||pain<0||pain>3))throw Error('Nivel de dolor no reconocido.');
+ if(typeof note!=='string'||note.length>1000)throw Error('La nota del día admite hasta 1000 caracteres.');
+ return {date:r.date,flow,pain,mood:tags(r.mood??[],LOG.mood),symptoms:tags(r.symptoms??[],LOG.symptoms),note:note.trim()};
+ }).filter(r=>r.flow!==null||r.pain!==null||r.mood.length||r.symptoms.length||r.note).sort((a,b)=>a.date.localeCompare(b.date));
+}
+// Intervals outside 15–90 days, or far above the recent median (a probable missed record), are kept for display but not used.
+export function cycleIntervals(data){
+ const p=cycleAnchors(data),all=p.slice(1).map((x,i)=>({start:p[i].start,length:days(x.start,p[i].start)}));
+ const plausible=all.filter(x=>x.length>=15&&x.length<=90),m=median(plausible.slice(-6).map(x=>x.length));
+ return all.map(x=>({...x,used:x.length>=15&&x.length<=90&&!(plausible.length>=3&&x.length>m*1.6)}));
 }
 export function cycleStats(data){
- const p=cycleAnchors(data), intervals=p.slice(1).map((x,i)=>days(x.start,p[i].start)).slice(-6);
+ const all=cycleIntervals(data),intervals=all.filter(x=>x.used).slice(-6).map(x=>x.length);
  const length=Math.round(median(intervals)??data.settings.cycle);
  const durations=data.periods.filter(x=>x.end).slice(-6).map(x=>days(x.end,x.start)+1);
- return {length,duration:Math.round(median(durations)??data.settings.duration),intervals,spread:intervals.length?Math.max(...intervals)-Math.min(...intervals):0};
+ return {length,duration:Math.round(median(durations)??data.settings.duration),intervals,excluded:all.filter(x=>!x.used).length,spread:intervals.length?Math.max(...intervals)-Math.min(...intervals):0};
 }
 export function forecast(data,date=today()){
  const stats=cycleStats(data),last=cycleAnchors(data).at(-1);
  if(!last)return {...stats,next:null,range:null,cycleDay:null,late:false};
  const next=addDays(last.start,stats.length),margin=stats.intervals.length>=2?Math.max(2,Math.ceil(stats.spread/2)):4;
  return {...stats,next,range:[addDays(next,-margin),addDays(next,margin)],cycleDay:days(date,last.start)+1,late:date>addDays(next,margin)};
+}
+// Upcoming estimated periods. A late forecast is never rolled forward, so it projects nothing.
+export function projections(data,count=6,date=today()){
+ const f=forecast(data,date);if(!f.next||f.late)return [];
+ return Array.from({length:count},(_,i)=>{const start=addDays(f.next,i*f.length);return {start,end:addDays(start,f.duration-1)};});
+}
+// An open period this old was probably never closed: registering a period then creates a new one instead of editing it.
+export const STALE_OPEN = 15;
+export function staleOpen(data,date=today()){const p=data.periods.find(p=>p.end===null);return p&&days(date,p.start)>=STALE_OPEN?p:null;}
+// When a new period starts after one left open, propose closing the old one; never applied without confirmation.
+export function closeOpenBefore(data,start){
+ const open=data.periods.find(p=>p.end===null&&p.start<start);if(!open)return null;
+ return {start:open.start,end:[addDays(open.start,cycleStats(data).duration-1),addDays(start,-1),today()].sort()[0]};
+}
+export function cycleHistory(data){
+ const iv=cycleIntervals(data);
+ return cycleAnchors(data).map((a,i)=>{const p=data.periods.find(p=>p.start===a.start);return {start:a.start,reference:a.reference,end:p?.end??null,bleeding:p?.end?days(p.end,p.start)+1:null,length:iv[i]?.length??null,used:iv[i]?.used??false};});
+}
+export function logSummary(data,from,to=today()){
+ const rows=(data.logs??[]).filter(l=>l.date>=from&&l.date<=to);
+ const count=field=>Object.entries(LOG[field]).map(([id,label])=>({id,label,days:rows.filter(l=>l[field].includes(id)).length})).filter(x=>x.days).sort((a,b)=>b.days-a.days);
+ return {days:rows.length,flow:rows.filter(l=>l.flow).length,pain:rows.filter(l=>l.pain>0).length,symptoms:count('symptoms'),mood:count('mood')};
 }
 function phaseFor(data,date){
  const ps=cycleAnchors(data);let idx=-1;ps.forEach((p,i)=>{if(p.start<=date)idx=i;});
@@ -78,7 +129,7 @@ const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function keyFor(password,salt){const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:600000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 export async function encrypt(data,password){if(password.length<12)throw Error('Usa una contraseña de al menos 12 caracteres.');const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),key=await keyFor(password,salt);const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(validate(data))));return {format:'lua-encrypted',version:1,kdf:'PBKDF2-SHA256',iterations:600000,salt:b64(salt),iv:b64(iv),cipher:b64(new Uint8Array(cipher))};}
 export async function decrypt(payload,password){if(payload.format!=='lua-encrypted'||payload.version!==1||payload.iterations!==600000)throw Error('Formato de copia cifrada incompatible.');try{const salt=unb64(payload.salt),iv=unb64(payload.iv);if(salt.length!==16||iv.length!==12)throw Error();const key=await keyFor(password,salt);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,unb64(payload.cipher));return validate(JSON.parse(new TextDecoder().decode(plain)));}catch{throw Error('No se puede abrir la copia. Contraseña incorrecta o archivo dañado.');}}
-export function demoData(){const d=empty();const t=today();for(let n=5;n>=0;n--){const start=addDays(t,-12-n*28);d.periods.push({start,end:addDays(start,4)});for(const offset of [2,8,9,16,23])d.desire.push({date:addDays(start,offset),value:offset===8||offset===9?2:1});}d.desire=d.desire.filter(r=>r.date<=t);return validate(d);}
+export function demoData(){const d=empty();const t=today();for(let n=5;n>=0;n--){const start=addDays(t,-12-n*28);d.periods.push({start,end:addDays(start,4)});for(const offset of [2,8,9,16,23])d.desire.push({date:addDays(start,offset),value:offset===8||offset===9?2:1});}d.desire=d.desire.filter(r=>r.date<=t);d.logs=d.periods.flatMap(p=>[{...emptyLog(p.start),flow:'medium',pain:2,symptoms:['cramps']},{...emptyLog(addDays(p.start,1)),flow:'heavy',pain:1,symptoms:['cramps','fatigue']},{...emptyLog(addDays(p.start,-3)),mood:['sensitive'],symptoms:['bloating']}]).filter(l=>l.date<=t);return validate(d);}
 
 // Imported cycle boundaries are reference data, never bleeding intervals.
 export function validateCycles(rows){
@@ -95,7 +146,7 @@ export function validateCycles(rows){
  return {start:r.start,end,predictedEnd,status:r.status,source:'Flo · transcripción',bleedingConfirmed:false};
  }).sort((a,b)=>a.start.localeCompare(b.start)).map((r,i,a)=>{if(i&&a[i-1].end&&a[i-1].end>=r.start)throw Error('Ciclos superpuestos.');if(i&&a[i-1].status==='ongoing')throw Error('El ciclo en curso debe ser el último.');return r;});
 }
-export function cycleAnchors(data){const m=new Map((data.cycles??[]).map(c=>[c.start,{start:c.start,reference:true}]));data.periods.forEach(p=>m.set(p.start,{start:p.start,reference:false}));return [...m.values()].sort((a,b)=>a.start.localeCompare(b.start));}
+export function cycleAnchors(data){const refs=(data.cycles??[]).filter(c=>!data.periods.some(p=>Math.abs(days(p.start,c.start))<=ANCHOR_TOLERANCE));return [...data.periods.map(p=>({start:p.start,reference:false})),...refs.map(c=>({start:c.start,reference:true}))].sort((a,b)=>a.start.localeCompare(b.start));}
 export function importCycleHistory(data,raw){
  if(raw.format!=='cycle-history-json'||raw.schema_version!=='1.0'||!Array.isArray(raw.cycles)||!raw.cycles.length)throw Error('Formato de ciclos no reconocido.');
  const rows=validateCycles(raw.cycles.map(c=>{

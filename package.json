@@ -1,1 +1,1 @@
-{"name": "lua-local-cycle", "private": true, "version": "0.3.0", "type": "module", "scripts": {"test": "node --test core.test.js"}}
+{"name": "lua-local-cycle", "private": true, "version": "0.4.0", "type": "module", "scripts": {"test": "node --test"}}

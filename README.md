@@ -1,4 +1,4 @@
-# Lúa · 0.3
+# Lúa · 0.4
 
 PWA personal de ciclo menstrual en español. Aplicación estática para GitHub Pages, sin backend, cuentas, analítica, fuentes remotas ni dependencias de producción. Esta entrega no contiene datos personales ni exportaciones reales de Flo.
 
@@ -42,7 +42,7 @@ El contenido publicado es el código, nunca copias, historial ni archivos de imp
 
 ## Actualizaciones
 
-Al cambiar archivos cacheados, subir la versión de `CACHE` en `sw.js`. El nuevo service worker espera al cierre de las ventanas anteriores para evitar mezclar código de versiones diferentes. Preservar el esquema de datos o implementar migraciones explícitas antes de cambiarlo.
+Al publicar cambios, subir la versión en `core.js` (`VERSION`), `sw.js` (`VERSION`) y `package.json`; `npm test` comprueba que coinciden y que todos los módulos están en `ASSETS` de `sw.js`. El nuevo service worker espera al cierre de las ventanas anteriores para evitar mezclar código de versiones diferentes. Preservar el esquema de datos o implementar migraciones explícitas antes de cambiarlo.
 
 ## Prueba pendiente en iPhone
 
@@ -61,3 +61,13 @@ Resumen de ciclo, vista semanal, check-in opcional de un toque, formularios infe
 ## Bienestar y diseño 0.3
 Paleta lila y morada. Hoy muestra dos consejos educativos basados en NHS (PMS y period pain, consultados 18/10/2026), con fuentes accesibles. La selección usa fechas orientativas y prioriza respuestas afirmativas de los últimos 90 días; no predice síntomas ni confirma fases hormonales. Las respuestas diarias se pueden corregir o deshacer y se conservan en las copias cifradas mediante el campo opcional tipResponses. Las copias anteriores se mantienen compatibles.
 La actualización de versiones posteriores ofrece un botón que activa el worker en espera y recarga. Para versiones antiguas: actualizar.html renueva solo la caché de aplicación sin borrar IndexedDB.
+
+## Registro diario e historial 0.4
+- Registro diario opcional: sangrado (manchado/ligero/medio/abundante), dolor, ánimo, síntomas y nota. Se guarda en el campo opcional `logs`; las copias anteriores siguen siendo compatibles. Marcar sangrado no crea una regla: se ofrece registrarla.
+- Pestaña Historial: resumen (mediana y variación del ciclo, duración de la regla), gráfico de duración de los ciclos y recuento de síntomas de los últimos 90 días.
+- Resumen para consulta: HTML para imprimir y CSV de ciclos y del registro diario. No están cifrados; las notas solo se incluyen si se pide.
+- Calendario con previsión de las seis próximas reglas; las lejanas se muestran más tenues.
+- Previsión más robusta: una regla registrada a 7 días o menos de un ciclo importado lo sustituye, y los intervalos atípicos (fuera de 15–90 días o muy por encima de la mediana, típicamente una regla sin registrar) se muestran pero no se usan.
+- Una regla abierta desde hace 15 días o más se trata como olvidada: registrar una nueva propone cerrarla con la duración habitual, siempre con confirmación.
+- La aplicación se refresca al volver a primer plano (fecha de hoy y cambios desde otra ventana), conserva el foco tras cada toque y el service worker descarga sin la caché HTTP para no mezclar versiones.
+

@@ -1,4 +1,6 @@
-import {mkdir,copyFile,rm} from 'node:fs/promises';
-await rm('dist',{recursive:true,force:true});await mkdir('dist');
-for(const file of ['index.html','style.css','app.js','core.js','tips.js','actualizar.html','storage.js','sw.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png'])await copyFile(file,`dist/${file}`);
-await copyFile('.nojekyll','dist/.nojekyll');
+import {mkdir,copyFile,rm,readFile} from 'node:fs/promises';
+import {dirname} from 'node:path';
+// The service worker's ASSETS list is the single source of shipped files.
+const assets=JSON.parse((await readFile('sw.js','utf8')).match(/const ASSETS=(\[.*?\]);/)[1].replace(/'/g,'"')).filter(a=>a!=='./').map(a=>a.slice(2));
+await rm('dist',{recursive:true,force:true});
+for(const file of [...assets,'sw.js','actualizar.html','.nojekyll']){await mkdir(dirname(`dist/${file}`),{recursive:true});await copyFile(file,`dist/${file}`);}
