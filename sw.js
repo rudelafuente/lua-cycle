@@ -1,5 +1,5 @@
 // VERSION must match core.js and package.json (checked by npm test).
-const VERSION='0.5.0',CACHE='lua-shell-'+VERSION;
+const VERSION='0.6.0',CACHE='lua-shell-'+VERSION;
 const ASSETS=['./','./index.html','./style.css','./app.js','./core.js','./tips.js','./storage.js','./report.js','./views/shared.js','./views/home.js','./views/calendar.js','./views/history.js','./views/settings.js','./views/modals.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 // cache:'reload' bypasses the HTTP cache so a new version never stores stale files from the previous one.
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(url=>new Request(url,{cache:'reload'}))))));

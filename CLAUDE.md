@@ -50,6 +50,7 @@ Módulos ES nativos cargados desde `index.html`:
   - `validate()` y el vocabulario del registro diario (`LOG`).
   - Previsión: `cycleAnchors` → `cycleIntervals` → `cycleStats` → `forecast`, más `projections`.
   - `closeOpenBefore` y `staleOpen` (reglas sin cerrar), `cycleHistory`, `logSummary` y `desireEstimate`.
+  - `cycleStatus` y `dayInfo`, que alimentan el resumen «de un vistazo» del calendario.
   - Lectura de CSV, importación de Flo (`importCycleHistory`) y las copias cifradas (`encrypt`/`decrypt`).
 - `tips.js` — las «pequeñas pistas»: un catálogo de temas breves con fuente del NHS.
   - Lo anotado en el registro diario cuenta como respuesta: `matches`/`answer`, y `applyAnswer` escribe en `logs`.

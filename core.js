@@ -1,6 +1,6 @@
 // Pure local calculations. No network, telemetry, or clinical claims.
 export const DAY = 86400000;
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 export const empty = () => ({version:1,periods:[],cycles:[],logs:[],tipResponses:[],desire:[],settings:{cycle:28,duration:5,cycleGuidance:true},lastBackup:null});
 // Daily log vocabulary. Ids are stored; labels are only for display and exports.
 export const LOG = {
@@ -75,6 +75,19 @@ export function projections(data,count=6,date=today()){
 // An open period this old was probably never closed: registering a period then creates a new one instead of editing it.
 export const STALE_OPEN = 15;
 export function staleOpen(data,date=today()){const p=data.periods.find(p=>p.end===null);return p&&days(date,p.start)>=STALE_OPEN?p:null;}
+// Where a date sits: cycle day (from the last anchor, or from a projected start for future dates) and period state.
+export function dayInfo(data,date,now=today()){
+ const f=forecast(data,now),upcoming=projections(data,6,now),real=data.periods.find(p=>date>=p.start&&date<=(p.end??now)),imp=!real&&importedPeriodOn(data,date),proj=!real&&date>now?upcoming.find(r=>date>=r.start&&date<=r.end):null;
+ let anchor=cycleAnchors(data).filter(a=>a.start<=date).at(-1)??null;
+ if(date>now){const p=upcoming.filter(r=>r.start<=date).at(-1);if(p)anchor={start:p.start,projected:true};}
+ return {date,cycleDay:anchor?days(date,anchor.start)+1:null,cycleStart:anchor?.start??null,projected:!!anchor?.projected,period:real?'confirmed':imp?'imported':proj?'predicted':null,periodDay:real?days(date,real.start)+1:imp?days(date,imp.start)+1:proj?days(date,proj.start)+1:null,untilNext:f.next&&!f.late&&date<f.next?days(f.next,date):null};
+}
+// Everything the calendar summary needs about the current cycle, or null without any start date.
+export function cycleStatus(data,now=today()){
+ const f=forecast(data,now),last=cycleAnchors(data).at(-1);if(!last)return null;
+ const p=data.periods.find(p=>p.start===last.start),c=(data.cycles??[]).find(c=>c.start===last.start);
+ return {cycleDay:f.cycleDay,length:f.length,duration:f.duration,durationSource:f.durationSource,lastStart:last.start,lastReference:last.reference,lastLength:p?(p.end?days(p.end,p.start)+1:null):c?.periodDays??null,lastOpen:p?.end===null,daysSince:days(now,last.start),next:f.next,range:f.range,daysUntil:days(f.next,now),late:f.late,lateBy:f.late?days(now,f.next):0};
+}
 // When a new period starts after one left open, propose closing the old one; never applied without confirmation.
 export function closeOpenBefore(data,start){
  const open=data.periods.find(p=>p.end===null&&p.start<start);if(!open)return null;
